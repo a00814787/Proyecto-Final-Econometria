@@ -1,0 +1,1035 @@
+---
+title: "Proyecto Final — Construcción de un Portafolio de Inversión con Herramientas Econométricas"
+author: "Ulises Salinas Lopez | A00814787"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introducción
+
+El presente proyecto tiene como objetivo construir un portafolio de inversión
+de corto plazo con un horizonte de 7 días, destinando un capital de
+**$100,000,000 USD** en la plataforma de simulación HowMarketWorks.
+
+El análisis se desarrolla en **dos etapas**:
+
+- **Parte 1:** Análisis inicial de 10 acciones tecnológicas con datos intradía
+de 5 minutos provenientes de Refinitiv. A partir de regresiones lineales
+simples y múltiples, detección de multicolinealidad, pruebas de
+heterocedasticidad y autocorrelación, se identificaron 6 acciones con las
+cuales se construyó un primer portafolio de inversión en HowMarketWorks.
+
+- **Parte 2:** Análisis robusto de 15 activos (acciones y ETFs) con datos
+diarios de Refinitiv, incorporando activos defensivos de otros sectores para
+construir un portafolio más diversificado y respaldado por un conjunto
+ampliado de herramientas econométricas, incluyendo series de tiempo ARIMA.
+
+Los datos provienen de **Refinitiv**, garantizando la calidad y consistencia
+de la información utilizada en todos los modelos.
+
+---
+
+# PARTE 1 — Análisis inicial: 10 acciones tecnológicas
+
+## Contexto y objetivo
+
+En una primera etapa del proyecto se analizaron acciones del sector tecnológico
+utilizando precios de cierre a **5 minutos** descargados directamente de
+Refinitiv, correspondientes al período del **3 al 6 de febrero de 2026**
+(456 observaciones intradía). El objetivo fue identificar, a través de modelos
+econométricos, cuáles acciones presentaban las relaciones más sólidas y
+significativas para conformar un primer portafolio de inversión.
+
+Las acciones analizadas fueron:
+**TSLA, AMZN, MSFT, AAPL, GOOG, NVDA, META, INTEL, AMD, QCOM, NFLX**
+
+---
+
+## Sección 1.1 — Carga de librerías
+
+Se cargan las librerías necesarias para ejecutar todas las funciones
+del análisis: lectura de archivos Excel, manipulación de datos,
+visualización, análisis de rendimientos y pruebas de supuestos
+de regresión lineal.
+
+```{r librerias-parte1}
+library(readxl)               # Lectura de archivos Excel de Refinitiv
+library(dplyr)                # Manipulación y limpieza de datos
+library(ggplot2)              # Visualizaciones
+library(PerformanceAnalytics) # Análisis de rendimientos financieros
+library(lmtest)               # Pruebas de heterocedasticidad y autocorrelación
+library(car)                  # Cálculo de VIF para multicolinealidad
+```
+
+---
+
+## Sección 1.2 — Carga y limpieza de datos
+
+Se carga el archivo exportado de Refinitiv con los retornos a 5 minutos
+de las acciones tecnológicas. Se convierten todas las columnas a formato
+numérico (excepto la fecha) y se eliminan filas con valores faltantes
+para garantizar que los modelos corran sin errores.
+
+```{r carga-5min}
+# Se carga la matriz de retornos a 5 minutos descargada de Refinitiv
+Matriz_5min_Returns_V2 <- read_excel("Matriz_5min_Returns_V2.xlsx")
+
+# Se convierten todas las columnas de retornos a numéricas (excepto la fecha),
+# tal como se hizo en clase con esta misma matriz
+Matriz_5min_Returns_V2 <- Matriz_5min_Returns_V2 %>%
+  mutate(across(-`Local Date`, as.numeric))
+
+# Se eliminan filas con valores NA para garantizar modelos limpios
+Matriz_5min_Returns_V2 <- na.omit(Matriz_5min_Returns_V2)
+
+# Se verifica la estructura del archivo para confirmar que cargó correctamente
+str(Matriz_5min_Returns_V2)
+head(Matriz_5min_Returns_V2, 5)
+```
+
+La base de datos cargó correctamente con **456 observaciones** y **11 columnas**
+(fecha + 10 acciones tecnológicas). Cada fila representa un intervalo de
+5 minutos del período del 3 al 6 de febrero de 2026. No se encontraron valores
+faltantes, por lo que la matriz está lista para el análisis sin necesidad de
+imputación adicional.
+
+---
+
+## Sección 1.3 — Regresiones lineales simples
+
+Se corre una regresión lineal simple de **TSLA vs cada una de las otras
+acciones**, usando los retornos a 5 minutos. Este paso permite evaluar la
+relación individual de Tesla con cada activo antes de construir el modelo
+múltiple, identificando cuáles son estadísticamente significativas y en
+qué dirección se mueven respecto a TSLA.
+
+```{r reg-simples-parte1}
+# TSLA vs AMZN
+mod_tsla_amzn <- lm(TSLA_CLOSE ~ AMZN_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_amzn)
+
+# TSLA vs MSFT
+mod_tsla_msft <- lm(TSLA_CLOSE ~ MSFT_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_msft)
+
+# TSLA vs AAPL
+mod_tsla_aapl <- lm(TSLA_CLOSE ~ APPL_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_aapl)
+
+# TSLA vs GOOG
+mod_tsla_goog <- lm(TSLA_CLOSE ~ GOOG_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_goog)
+
+# TSLA vs NVDA
+mod_tsla_nvda <- lm(TSLA_CLOSE ~ NVIDIA_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_nvda)
+
+# TSLA vs META
+mod_tsla_meta <- lm(TSLA_CLOSE ~ META_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_meta)
+
+# TSLA vs INTEL
+mod_tsla_intel <- lm(TSLA_CLOSE ~ INTEL_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_intel)
+
+# TSLA vs AMD
+mod_tsla_amd <- lm(TSLA_CLOSE ~ AMD_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_amd)
+
+# TSLA vs QCOM
+mod_tsla_qcom <- lm(TSLA_CLOSE ~ QCOM_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_qcom)
+
+# TSLA vs NFLX
+mod_tsla_nflx <- lm(TSLA_CLOSE ~ NFLX_CLOSE, data = Matriz_5min_Returns_V2)
+summary(mod_tsla_nflx)
+```
+
+**Interpretación de las regresiones lineales simples (Parte 1):**
+
+Todos los modelos resultaron estadísticamente significativos (p-value < 2.2e-16),
+lo que confirma que cada una de las acciones tiene una relación lineal
+significativa con TSLA en el corto plazo intradía. Los resultados más
+relevantes son los siguientes:
+
+- **AMD** presenta el R² más alto del grupo (0.837), indicando que el 83.7%
+de la variación intradía de TSLA es explicada únicamente por AMD. Esto refleja
+una co-movilidad muy intensa entre ambas acciones dentro del subsector de
+semiconductores y growth.
+- **META** (R² = 0.809) y **NVDA** (R² = 0.725) ocupan el segundo y tercer
+lugar, confirmando el papel de estos activos como factores dominantes
+del sector tecnológico con fuerte correlación con TSLA en horizontes intradía.
+- **GOOG** (R² = 0.695) muestra una relación sólida, reflejando la exposición
+común a factores de crecimiento del mercado tecnológico.
+- **MSFT** (R² = 0.442), **AAPL** (R² = 0.502) y **AMZN** (R² = 0.530)
+presentan capacidades explicativas moderadas, lo que sugiere que capturan
+dinámicas parcialmente diferenciadas respecto a TSLA.
+- **NFLX** (R² = 0.249) es el activo con menor correlación con TSLA,
+consistente con su perfil de entretenimiento digital frente al hardware
+y semiconductores.
+
+En conjunto, estos resultados anticipan que el modelo múltiple capturará
+factores comunes del sector, con un riesgo importante de multicolinealidad
+entre las variables con R² más altos.
+
+---
+
+## Sección 1.4 — Regresión lineal múltiple
+
+Se corre el modelo de regresión lineal múltiple con **TSLA como variable
+dependiente** y las demás acciones como variables independientes. Se
+especifican explícitamente las variables independientes para excluir la
+columna de fecha (`Local Date`), que no es una variable explicativa del
+modelo sino un índice temporal.
+
+```{r reg-multiple-parte1}
+# Regresión múltiple: TSLA vs todas las demás acciones del portafolio
+# Se listan explícitamente las variables independientes para evitar incluir
+# la columna de fecha en el modelo, lo que distorsionaría los coeficientes
+mod_tsla_vs_todas <- lm(TSLA_CLOSE ~ AMZN_CLOSE + MSFT_CLOSE + APPL_CLOSE +
+                          GOOG_CLOSE + NVIDIA_CLOSE + META_CLOSE + INTEL_CLOSE +
+                          AMD_CLOSE + QCOM_CLOSE + NFLX_CLOSE,
+                        data = Matriz_5min_Returns_V2)
+summary(mod_tsla_vs_todas)
+```
+
+**Interpretación de la regresión lineal múltiple (Parte 1):**
+
+El modelo de regresión múltiple con TSLA como variable dependiente es
+globalmente significativo (F-statistic = 1,641, p-value < 2.2e-16) y alcanza
+un **R² ajustado de 0.973**, lo que implica que más del 97% de la variación
+intradía de Tesla a 5 minutos es explicada conjuntamente por las otras
+acciones tecnológicas. Este nivel extraordinariamente alto de ajuste confirma
+que TSLA está profundamente integrada al comportamiento del sector en el muy
+corto plazo.
+
+NVIDIA se consolida como la variable más influyente con el mayor coeficiente
+positivo y significativo, evidenciando que los movimientos de TSLA están
+fuertemente ligados al desempeño del subsector de semiconductores e
+inteligencia artificial. GOOG, QCOM, AMZN y AMD también presentan
+coeficientes positivos y altamente significativos. En contraste, INTEL muestra
+un coeficiente negativo y significativo, sugiriendo que sus movimientos intradía
+capturan shocks diferenciados dentro del ecosistema de semiconductores. MSFT
+aparece también con signo negativo, consistente con su perfil más defensivo.
+NFLX resulta no significativa (p = 0.152), indicando que no aporta información
+adicional relevante para explicar a TSLA una vez controladas las demás
+variables. El alto R² también advierte sobre un posible sobreajuste y elevada
+multicolinealidad, lo cual se analiza en la sección siguiente.
+
+---
+
+## Sección 1.5 — Detección de multicolinealidad
+
+La multicolinealidad ocurre cuando las variables independientes están
+altamente correlacionadas entre sí, lo que dificulta estimar correctamente
+el efecto individual de cada una sobre TSLA. Se aplican dos herramientas
+complementarias para detectarla.
+
+### Matriz de correlación
+
+Se calcula la matriz de correlación entre todas las acciones. Correlaciones
+por encima de 0.80 entre variables independientes son una señal de alerta
+de multicolinealidad.
+
+```{r correlacion-parte1}
+# Se seleccionan únicamente las columnas numéricas (sin la fecha)
+precios_num <- Matriz_5min_Returns_V2 %>% select(-`Local Date`)
+
+# Se calcula la matriz de correlación de Pearson entre todos los activos
+cor(precios_num)
+```
+
+**Interpretación de la matriz de correlación (Parte 1):**
+
+La matriz de correlación revela que todas las acciones presentan correlaciones
+positivas y moderadas-altas con TSLA, siendo AMD (0.915) y META (0.809) las
+más correlacionadas con la variable dependiente. Entre las variables
+independientes destacan correlaciones preocupantes: AMD-META (0.882) y
+GOOG-META (0.897) superan el umbral de 0.80, señalando multicolinealidad
+severa. NFLX es el único activo con correlaciones negativas respecto a la
+mayoría del grupo, lo que explica su baja capacidad explicativa individual.
+Esta estructura de correlaciones anticipa VIF elevados en varias variables
+del modelo múltiple.
+
+### Factor de Inflación de la Varianza (VIF)
+
+El VIF mide cuánto aumenta la varianza de cada coeficiente estimado debido
+a su correlación con las demás variables independientes. Un VIF mayor a 10
+indica multicolinealidad severa que compromete la confiabilidad del modelo.
+
+```{r vif-parte1}
+# Se calcula el VIF para el modelo múltiple de TSLA (mismo modelo que Sección 1.4)
+vif(mod_tsla_vs_todas)
+```
+
+**Interpretación del VIF (Parte 1):**
+
+Los resultados del VIF confirman la presencia de multicolinealidad severa.
+META presenta el VIF más alto (18.4), seguido por AMZN (15.9) y MSFT (13.9),
+todos por encima del umbral crítico de 10. AMD (11.8) y GOOG (10.6) también
+superan dicho límite. Estas cinco variables están capturando información
+altamente redundante, lo que infla la varianza de sus coeficientes y reduce
+la confiabilidad de las pruebas t individuales. Por otro lado, QCOM (4.6),
+NFLX (2.7) e INTEL (6.0) presentan VIF aceptables, indicando que aportan
+información más diferenciada. Esta elevada multicolinealidad no invalida el
+modelo para fines predictivos —el R² ajustado sigue siendo muy alto— pero
+sí limita la interpretación causal de los coeficientes individuales y
+refuerza la necesidad de una selección cuidadosa de activos para el portafolio.
+
+---
+
+## Sección 1.6 — Pruebas de heterocedasticidad
+
+La heterocedasticidad ocurre cuando la varianza de los residuos no es
+constante a lo largo de las observaciones, violando un supuesto clave
+de la regresión lineal clásica. Se aplican dos pruebas complementarias
+sobre el modelo múltiple de TSLA.
+
+### Prueba de Breusch-Pagan
+
+Evalúa si la varianza de los residuos depende sistemáticamente de las
+variables independientes del modelo. La hipótesis nula es homocedasticidad
+(varianza constante). Un p-value menor a 0.05 indica heterocedasticidad.
+
+```{r breusch-pagan-parte1}
+# H0: los residuos tienen varianza constante (homocedasticidad)
+# H1: la varianza de los residuos no es constante (heterocedasticidad)
+bptest(mod_tsla_vs_todas)
+```
+
+**Interpretación Breusch-Pagan (Parte 1):**
+
+La prueba arroja BP = 78.576 con p-value = 9.54e-13, por lo que se rechaza
+la hipótesis nula de homocedasticidad. La varianza de los residuos no es
+constante y depende de los valores de las variables independientes. En datos
+de alta frecuencia (5 minutos) este resultado es esperable, ya que los
+mercados financieros exhiben períodos de mayor y menor volatilidad durante
+la jornada (efecto clustering de volatilidad). La heterocedasticidad no
+invalida los coeficientes estimados, pero implica que los errores estándar
+podrían estar sesgados, afectando la validez de las pruebas t y F del modelo.
+
+### Prueba de Goldfeld-Quandt
+
+Divide la muestra en dos grupos y compara sus varianzas residuales.
+Un p-value menor a 0.05 confirma heterocedasticidad.
+
+```{r goldfeld-quandt-parte1}
+# H0: varianzas iguales en ambos grupos (homocedasticidad)
+# H1: varianzas distintas (heterocedasticidad)
+gqtest(mod_tsla_vs_todas)
+```
+
+**Interpretación Goldfeld-Quandt (Parte 1):**
+
+La prueba arroja GQ = 1.068 con p-value = 0.314, por lo que **no se rechaza**
+la hipótesis nula de igualdad de varianzas entre los dos grupos. Este resultado
+aparentemente contradictorio con Breusch-Pagan se explica por el diseño de
+cada prueba: mientras Breusch-Pagan detecta heterocedasticidad general
+(dependiente de los regresores), Goldfeld-Quandt evalúa específicamente si
+la varianza crece o decrece de forma monotónica. El resultado conjunto sugiere
+que la heterocedasticidad presente no sigue un patrón sistemático creciente
+o decreciente, sino que se manifiesta de forma difusa, consistente con el
+comportamiento irregular de la volatilidad intradía en mercados financieros.
+
+---
+
+## Sección 1.7 — Prueba de autocorrelación (Durbin-Watson)
+
+La autocorrelación ocurre cuando los residuos del modelo están correlacionados
+entre sí a lo largo del tiempo, violando el supuesto de independencia de
+errores. La prueba de Durbin-Watson detecta autocorrelación de primer orden:
+un estadístico cercano a 2 indica ausencia; valores cercanos a 0 indican
+autocorrelación positiva severa.
+
+```{r durbin-watson-parte1}
+# H0: no existe autocorrelación en los residuos (d ≈ 2)
+# H1: existe autocorrelación de primer orden
+dwtest(mod_tsla_vs_todas)
+```
+
+**Interpretación Durbin-Watson (Parte 1):**
+
+La prueba arroja DW = 0.277 con p-value < 2.2e-16, lo que lleva a rechazar
+contundentemente la hipótesis nula. Un valor tan cercano a 0 indica una
+autocorrelación positiva de primer orden muy severa: el residuo de cada
+período está fuertemente correlacionado con el del período anterior. Este
+resultado es completamente esperado en datos intradía de 5 minutos, donde
+los precios exhiben persistencia de muy corto plazo (momentum) que genera
+residuos correlacionados en el tiempo. La autocorrelación implica que los
+errores estándar del modelo están subestimados, inflando artificialmente la
+significancia de los coeficientes. Este hallazgo refuerza la decisión de
+migrar hacia datos diarios en la Parte 2, donde este problema es
+considerablemente menor.
+
+---
+
+## Sección 1.8 — Conclusión Parte 1: selección del portafolio inicial
+
+Con base en los resultados obtenidos — significancia estadística de los
+coeficientes, R² ajustado, VIF, pruebas de heterocedasticidad y
+autocorrelación — se tomó la decisión de construir el primer portafolio
+con las siguientes **6 acciones**:
+
+| Acción | Empresa | Peso | Monto (USD) |
+|--------|---------|------|-------------|
+| NVDA | NVIDIA | 30% | $30,000,000 |
+| TSLA | Tesla | 20% | $20,000,000 |
+| MSFT | Microsoft | 15% | $15,000,000 |
+| AMZN | Amazon | 15% | $15,000,000 |
+| QCOM | Qualcomm | 10% | $10,000,000 |
+| AAPL | Apple | 10% | $10,000,000 |
+| **Total** | | **100%** | **$100,000,000** |
+
+La estrategia de inversión del portafolio se fundamenta en los resultados
+obtenidos a partir de modelos de regresión lineal múltiple aplicados a
+rendimientos intradía de 5 minutos, así como en el análisis de correlaciones
+y factores de inflación de la varianza (VIF). Los resultados muestran que el
+comportamiento del portafolio tecnológico está dominado por factores comunes
+del sector, particularmente aquellos asociados a semiconductores, inteligencia
+artificial, crecimiento y tecnología de alto beta, lo que se refleja en
+valores elevados de R² y en una multicolinealidad significativa entre varias
+acciones. Bajo este contexto, el objetivo del portafolio no es maximizar la
+diversificación tradicional, sino capturar de forma eficiente los principales
+drivers tecnológicos, controlando el riesgo mediante una asignación
+diferenciada de capital.
+
+NVIDIA concentra el mayor peso (30%) por su papel central en el ecosistema
+de semiconductores e IA. TSLA (20%) se incluye como el activo de mayor beta
+y sensibilidad sectorial. MSFT (15%) y AMZN (15%) aportan diversificación
+interna con VIF moderados. QCOM (10%) complementa la exposición a
+semiconductores con información diferenciada. AAPL (10%) actúa como
+estabilizador por su comportamiento más idiosincrático. Se excluyeron INTEL,
+AMD, META y NFLX: INTEL y AMD por su alta correlación con NVDA que generaría
+redundancia, META por su VIF severo (18.4) y NFLX por ser la variable menos
+significativa del modelo múltiple.
+
+---
+
+# PARTE 2 — Portafolio robusto: 15 activos
+
+## Contexto y objetivo
+
+Habiendo identificado el portafolio inicial, se procede a una segunda etapa
+de análisis más robusta. Se incorporan **15 activos** — acciones tecnológicas
+y ETFs de distintos sectores — utilizando datos de precios de cierre
+**diarios** de Refinitiv con un histórico de **3 años**
+(marzo 2023 – marzo 2026, ~752 observaciones). El objetivo es construir
+un portafolio más diversificado que combine activos ofensivos del sector
+tecnológico con activos defensivos de otros sectores, respaldado por un
+análisis econométrico completo.
+
+**Activos ofensivos (tecnología):** TSLA, AMZN, AAPL, GOOGL, NVDA, QCOM,
+MSFT, META, QQQ
+
+**Activos defensivos:** SPY, XOM, JPM, JNJ, WMT, GLD
+
+---
+
+## Sección 2.1 — Carga de librerías
+
+Se cargan las librerías necesarias para la Parte 2. Se mantienen las mismas
+librerías de la Parte 1 y se agregan `quantmod` para el manejo de series
+de tiempo financieras, `tidyr` para la transformación de datos en los
+gráficos comparativos, y `writexl` para exportar el archivo hacia Google Colab.
+
+```{r librerias-parte2}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(PerformanceAnalytics)
+library(quantmod)    # Manejo de series de tiempo financieras (xts)
+library(lmtest)
+library(car)
+library(tidyr)       # Transformación de datos para visualizaciones
+library(writexl)     # Exportación de Excel para Google Colab
+```
+
+---
+
+## Sección 2.2 — Carga y limpieza de datos (Refinitiv diario)
+
+Se carga el archivo de Refinitiv con precios de cierre diarios de los
+15 activos. Se convierten las columnas a formato numérico, se eliminan
+las filas completamente vacías al final del archivo (artefacto del
+export de Refinitiv) y se verifican los datos antes de proceder.
+
+```{r carga-diario}
+# Se carga el archivo con precios de cierre diarios de Refinitiv
+datos_diario <- read_excel("Precios_Cierre_2.xlsx", sheet = "Sheet 1")
+
+# Se convierten todas las columnas de precios a numéricas (excepto la fecha)
+datos_diario <- datos_diario %>%
+  mutate(across(-`Exchange Date`, as.numeric))
+
+# Se eliminan filas con NA — esto limpia tanto los días sin dato de algún
+# activo como las filas vacías al final del archivo producto del export
+datos_diario <- na.omit(datos_diario)
+
+# Se verifica la estructura y los primeros registros
+str(datos_diario)
+head(datos_diario, 5)
+summary(datos_diario)
+```
+
+**Interpretación de la carga de datos (Parte 2):**
+
+El archivo cargó correctamente con **752 observaciones** de precios de cierre
+diarios para los 15 activos del portafolio, cubriendo el período de marzo de
+2023 a marzo de 2026. Las 32 filas vacías al final del archivo —artefacto
+típico del export de Refinitiv— fueron eliminadas automáticamente con
+`na.omit()`. El `summary()` permite verificar que los rangos de precios son
+coherentes con los valores de mercado esperados para cada activo, sin valores
+negativos ni outliers estructurales que indiquen errores de carga.
+
+---
+
+## Sección 2.3 — Cálculo de retornos diarios
+
+Se calculan los retornos diarios simples de cada activo. Los retornos son
+la base de todos los análisis de correlación, regresión y series de tiempo,
+ya que son estacionarios y permiten comparar activos con distintos niveles
+de precio.
+
+```{r retornos-diarios}
+# Se calcula el retorno diario simple de cada activo:
+# retorno = (precio_hoy / precio_ayer) - 1
+# Se ordena por fecha ascendente antes de calcular para evitar errores
+# con lag(), y se eliminan los NA generados en la primera observación
+
+retornos <- datos_diario %>%
+  arrange(`Exchange Date`) %>%
+  mutate(across(-`Exchange Date`,
+                ~ (. / lag(.) - 1),
+                .names = "ret_{.col}")) %>%
+  select(`Exchange Date`, starts_with("ret_")) %>%
+  na.omit()
+
+# Se verifica que el orden de columnas coincida con el esperado antes
+# de renombrar, para evitar desalineaciones silenciosas
+print(colnames(retornos))
+
+# Se renombran las columnas para simplificar el código de los modelos
+# El orden corresponde exactamente al del archivo Precios_Cierre_2.xlsx:
+# Exchange Date, TSLA, AMZN, AAPL, GOOGL, NVDA, QCOM, MSFT, META,
+# QQQ, SPY, XOM, JPM, JNJ, WMT, GLD
+colnames(retornos) <- c("Date", "TSLA", "AMZN", "AAPL", "GOOGL",
+                        "NVDA", "QCOM", "MSFT", "META", "QQQ",
+                        "SPY", "XOM", "JPM", "JNJ", "WMT", "GLD")
+
+head(retornos, 5)
+```
+
+**Interpretación del cálculo de retornos (Parte 2):**
+
+Se calcularon exitosamente **751 observaciones** de retornos diarios simples
+para los 15 activos (se pierde una observación por el uso de `lag()` en la
+primera fila). La verificación del orden de columnas confirmó que el rename
+está correctamente alineado con la estructura del archivo de Refinitiv. El
+uso de retornos simples es consistente con el enfoque de la Parte 1 y
+facilita la interpretación directa como porcentaje de cambio diario.
+
+---
+
+## Sección 2.4 — Análisis Exploratorio de Datos (EDA)
+
+Antes de correr cualquier modelo, se realiza un análisis exploratorio
+para entender el comportamiento de cada activo: evolución de precios en
+el tiempo, distribución de retornos y presencia de valores extremos.
+
+### Evolución de precios de cierre
+
+Se grafica la serie de precios de cierre de cada activo para identificar
+tendencias, quiebres estructurales y diferencias de escala entre ofensivos
+y defensivos.
+
+```{r eda-precios}
+# Activos ofensivos: precios de cierre en el período analizado
+activos_ofensivos <- c("TSLA", "AMZN", "AAPL", "GOOGL", "NVDA",
+                       "QCOM", "MSFT", "META", "QQQ")
+par(mfrow = c(3, 3))
+for (col in activos_ofensivos) {
+  plot(datos_diario$`Exchange Date`, datos_diario[[col]],
+       type = "l", main = paste("Precio cierre:", col),
+       xlab = "Fecha", ylab = "USD", col = "steelblue")
+}
+
+# Activos defensivos: precios de cierre en el período analizado
+activos_defensivos <- c("SPY", "XOM", "JPM", "JNJ", "WMT", "GLD")
+par(mfrow = c(2, 3))
+for (col in activos_defensivos) {
+  plot(datos_diario$`Exchange Date`, datos_diario[[col]],
+       type = "l", main = paste("Precio cierre:", col),
+       xlab = "Fecha", ylab = "USD", col = "darkgreen")
+}
+par(mfrow = c(1, 1))
+```
+
+**Interpretación de la evolución de precios (Parte 2):**
+
+Las series de precios muestran el contraste entre activos ofensivos y
+defensivos. Entre los ofensivos, NVDA y META muestran tendencias alcistas
+pronunciadas con alta volatilidad, consistentes con su exposición a temas de
+inteligencia artificial y publicidad digital. TSLA exhibe un comportamiento
+más errático con movimientos bruscos en ambas direcciones, confirmando su
+perfil de alto beta. QQQ muestra una trayectoria más suavizada que refleja
+la diversificación inherente del ETF del Nasdaq 100.
+
+Entre los defensivos, SPY presenta una tendencia alcista moderada y estable
+que sirve como referencia del mercado general. GLD destaca por su
+comportamiento diferenciado: tiende a apreciarse en períodos de incertidumbre,
+funcionando como activo de refugio. JNJ y WMT muestran la menor volatilidad
+del grupo, confirmando su rol como activos de baja sensibilidad al ciclo.
+
+### Histogramas de retornos diarios
+
+Se grafican los histogramas de retornos para evaluar visualmente si
+la distribución se aproxima a la normal — supuesto clave de los modelos
+de regresión lineal.
+
+```{r eda-histogramas}
+# Histogramas de retornos para los activos ofensivos
+par(mfrow = c(3, 3))
+for (col in activos_ofensivos) {
+  hist(retornos[[col]], probability = TRUE,
+       main = paste("Retornos:", col),
+       xlab = "Retorno diario", col = "lightblue", border = "white")
+}
+
+# Histogramas de retornos para los activos defensivos
+par(mfrow = c(2, 3))
+for (col in activos_defensivos) {
+  hist(retornos[[col]], probability = TRUE,
+       main = paste("Retornos:", col),
+       xlab = "Retorno diario", col = "lightgreen", border = "white")
+}
+par(mfrow = c(1, 1))
+```
+
+**Interpretación de los histogramas (Parte 2):**
+
+Los histogramas muestran distribuciones aproximadamente simétricas y centradas
+en cero para todos los activos, consistentes con la hipótesis de eficiencia
+de mercado en el corto plazo. Sin embargo, se observa en la mayoría una
+distribución leptocúrtica (colas más pesadas que la normal), especialmente
+en TSLA y NVDA, que presentan la mayor dispersión y los valores extremos
+más pronunciados. Este fenómeno —conocido como *fat tails*— es característico
+de los retornos financieros y sugiere que los modelos de regresión lineal
+deben interpretarse con cautela respecto al supuesto de normalidad de los
+errores. Los activos defensivos (JNJ, WMT, GLD) muestran distribuciones más
+concentradas alrededor de cero, confirmando su menor volatilidad.
+
+### Boxplots de retornos
+
+Los boxplots permiten identificar la volatilidad relativa de cada activo
+y la presencia de valores atípicos (outliers), que son comunes en datos
+financieros de corto plazo.
+
+```{r eda-boxplots}
+# Se transforma la tabla a formato largo para el gráfico comparativo
+# usando tidyr::pivot_longer(), previamente cargado en las librerías
+retornos_long <- retornos %>%
+  select(-Date) %>%
+  pivot_longer(everything(), names_to = "Activo", values_to = "Retorno")
+
+ggplot(retornos_long, aes(x = reorder(Activo, Retorno, FUN = sd),
+                          y = Retorno, fill = Activo)) +
+  geom_boxplot(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "Distribución de retornos diarios por activo",
+       x = "Activo", y = "Retorno diario") +
+  theme_minimal()
+```
+
+**Interpretación de los boxplots (Parte 2):**
+
+El gráfico comparativo confirma visualmente la separación entre activos
+ofensivos y defensivos en términos de volatilidad. TSLA y NVDA presentan
+las cajas más amplias y el mayor número de valores atípicos, reflejando su
+alta volatilidad diaria y perfil de alto beta. En el extremo opuesto, GLD,
+JNJ y WMT muestran cajas muy compactas con escasa dispersión, confirmando
+su rol como activos de cobertura y baja volatilidad. SPY ocupa una posición
+intermedia como benchmark del mercado. Esta distribución valida la lógica
+de construcción del portafolio: combinar activos de alta volatilidad —que
+generan rendimientos superiores en tendencias alcistas— con activos defensivos
+que amortiguan las caídas.
+
+---
+
+## Sección 2.5 — Análisis de correlación
+
+Se calcula la matriz de correlación de Pearson entre los retornos diarios
+de los 15 activos. Este análisis permite identificar qué activos se mueven
+juntos (alta correlación positiva) y cuáles se diversifican entre sí
+(correlación baja o negativa), información clave para la construcción
+del portafolio.
+
+```{r correlacion-parte2}
+# Se calcula la matriz de correlación de Pearson sobre los retornos diarios
+retornos_num <- retornos %>% select(-Date)
+matriz_cor <- cor(retornos_num, use = "complete.obs", method = "pearson")
+
+# Se muestra la matriz redondeada a 3 decimales
+round(matriz_cor, 3)
+```
+
+**Interpretación de la matriz de correlación (Parte 2):**
+
+La matriz de correlación revela patrones claros que validan la estrategia
+de portafolio mixto. Dentro del bloque tecnológico, QQQ y SPY presentan
+la correlación más alta del portafolio (>0.95), esperable dado que ambos
+replican índices americanos con composición tecnológica muy similar. Las
+acciones tech entre sí muestran correlaciones entre 0.40 y 0.70, indicando
+co-movimiento sectorial sin llegar a la redundancia total.
+
+Los activos defensivos exhiben el comportamiento deseado: GLD presenta
+correlaciones cercanas a cero o ligeramente negativas con la mayoría de
+las acciones tecnológicas, confirmando su función como cobertura ante caídas
+del mercado. JNJ y WMT muestran las correlaciones más bajas con los activos
+ofensivos. Esta estructura confirma que la combinación de activos ofensivos
+y defensivos reduce efectivamente el riesgo total del portafolio.
+
+---
+
+## Sección 2.6 — Regresiones lineales simples (cada activo vs SPY)
+
+Se corre una regresión lineal simple de cada activo contra **SPY**
+(ETF del S&P 500), que funciona como benchmark del mercado. El coeficiente
+beta estimado indica la sensibilidad de cada activo a los movimientos
+generales del mercado: beta > 1 significa que el activo es más volátil
+que el mercado (ofensivo), beta < 1 indica menor sensibilidad (defensivo).
+
+```{r reg-simples-parte2}
+# Se define el vector de activos a analizar (todos excepto SPY que es la X)
+activos <- c("TSLA", "AMZN", "AAPL", "GOOGL", "NVDA", "QCOM",
+             "MSFT", "META", "QQQ", "XOM", "JPM", "JNJ", "WMT", "GLD")
+
+# Se corre una regresión simple por cada activo vs SPY
+for (activo in activos) {
+  cat("\n========================================\n")
+  cat(paste("Regresión simple:", activo, "vs SPY\n"))
+  cat("========================================\n")
+  formula_simple <- as.formula(paste(activo, "~ SPY"))
+  mod_simple <- lm(formula_simple, data = retornos)
+  print(summary(mod_simple))
+
+  # Gráfica de dispersión con línea de regresión
+  plot(retornos$SPY, retornos[[activo]],
+       main = paste(activo, "vs SPY — retornos diarios"),
+       xlab = "Retorno diario SPY",
+       ylab = paste("Retorno diario", activo),
+       pch = 16, col = "steelblue")
+  abline(mod_simple, col = "red", lwd = 2)
+  grid()
+}
+```
+
+**Interpretación de las regresiones simples vs SPY (Parte 2):**
+
+Las regresiones simples contra SPY permiten clasificar cada activo según
+su beta de mercado y confirmar la división ofensivo/defensivo:
+
+**Activos ofensivos:** QQQ presenta el R² más alto (0.907), confirmando que
+replica casi perfectamente al mercado. AMZN (R² = 0.452), AAPL (R² = 0.450),
+QCOM (R² = 0.445) y NVDA (R² = 0.416) muestran relaciones sólidas con el
+mercado. TSLA (R² = 0.348) tiene la relación más débil dentro del grupo
+ofensivo, consistente con su mayor componente idiosincrático.
+
+**Activos defensivos:** GLD (R² = 0.007) y JNJ (R² = 0.002) prácticamente
+no tienen relación lineal con SPY, confirmando su función como activos de
+cobertura pura. WMT (R² = 0.098) y XOM (R² = 0.071) también muestran baja
+sensibilidad al mercado general. JPM (R² = 0.361) es el defensivo con mayor
+correlación con SPY, reflejando su exposición al ciclo económico como banco
+de inversión. En todos los casos los modelos son estadísticamente
+significativos, validando el uso de SPY como variable de referencia para
+clasificar los activos del portafolio.
+
+---
+
+## Sección 2.7 — Regresión lineal múltiple
+
+Se construyen dos modelos de regresión múltiple para mantener consistencia
+con el análisis de la Parte 1:
+
+- **Modelo A:** TSLA como variable dependiente (mismo enfoque que la Parte 1,
+permite comparar el comportamiento de Tesla en datos diarios vs. intradía).
+- **Modelo B:** SPY como variable dependiente, para identificar qué activos
+del portafolio explican de forma significativa el comportamiento del mercado
+una vez controlados los efectos de los demás.
+
+```{r reg-multiple-parte2}
+# Modelo A: TSLA como variable dependiente (consistencia con Parte 1)
+mod_tsla_p2 <- lm(TSLA ~ AMZN + AAPL + GOOGL + NVDA + QCOM +
+                    MSFT + META + QQQ + SPY + XOM + JPM + JNJ + WMT + GLD,
+                  data = retornos)
+cat("=== Modelo A: TSLA vs todos los activos ===\n")
+summary(mod_tsla_p2)
+
+# Modelo B: SPY como variable dependiente (benchmark del mercado)
+mod_spy_p2 <- lm(SPY ~ TSLA + AMZN + AAPL + GOOGL + NVDA + QCOM +
+                   MSFT + META + QQQ + XOM + JPM + JNJ + WMT + GLD,
+                 data = retornos)
+cat("\n=== Modelo B: SPY vs todos los activos ===\n")
+summary(mod_spy_p2)
+```
+
+**Interpretación de la regresión múltiple (Parte 2):**
+
+**Modelo A — TSLA como variable dependiente:**
+El modelo es globalmente significativo (F = 42.05, p-value < 2.2e-16) con
+un R² ajustado de **0.434**. Este valor es considerablemente menor al 0.973
+obtenido con datos intradía en la Parte 1, lo que refleja que a frecuencia
+diaria la variación de TSLA tiene un mayor componente idiosincrático no
+capturado por los demás activos. Econométricamente esto es sano: significa
+que TSLA aporta información única al portafolio y no es redundante. QQQ y
+SPY son las variables con mayor poder explicativo sobre TSLA a nivel diario,
+mientras que los activos defensivos (GLD, JNJ, WMT) no resultan significativos,
+consistente con su bajo nivel de correlación con TSLA.
+
+**Modelo B — SPY como variable dependiente:**
+El modelo alcanza un R² ajustado de **0.961** (F = 1,333, p-value < 2.2e-16),
+confirmando que QQQ es el principal conductor del comportamiento de SPY dentro
+del portafolio —esperable dado que ambos son ETFs con composiciones solapadas.
+Los activos defensivos (GLD, JNJ, XOM) muestran coeficientes pequeños o no
+significativos, validando que su inclusión no introduce redundancia respecto
+al benchmark SPY, sino que aporta exposición a factores de riesgo diferenciados.
+
+---
+
+## Sección 2.8 — Detección de multicolinealidad
+
+Se verifica si existe multicolinealidad entre los activos del portafolio
+mediante el VIF aplicado a ambos modelos. En un portafolio mixto
+(ofensivos + defensivos) se espera que los activos tecnológicos presenten
+VIF más altos entre sí, mientras que los defensivos aporten menor
+colinealidad al modelo.
+
+```{r vif-parte2}
+# VIF para el Modelo A (TSLA como dependiente)
+cat("=== VIF Modelo A: TSLA como variable dependiente ===\n")
+vif(mod_tsla_p2)
+
+# VIF para el Modelo B (SPY como dependiente)
+cat("\n=== VIF Modelo B: SPY como variable dependiente ===\n")
+vif(mod_spy_p2)
+```
+
+**Interpretación del VIF (Parte 2):**
+
+La situación de multicolinealidad en la Parte 2 es considerablemente más
+saludable que en la Parte 1, con una excepción importante: el par QQQ-SPY.
+
+En el **Modelo A**, QQQ presenta VIF = 32.4 y SPY VIF = 26.2, ambos por
+encima del umbral crítico de 10. Esta colinealidad es estructural y esperada:
+QQQ y SPY son ETFs con correlación superior al 0.95 que replican índices muy
+similares. No indica un problema del modelo sino una característica inherente
+de estos activos. En la práctica, los coeficientes individuales de QQQ y SPY
+no son confiables de forma separada, aunque el modelo en su conjunto sigue
+siendo válido para predicción.
+
+El resto de activos presentan VIF muy saludables, todos entre 1.1 y 3.1,
+confirmando que la incorporación de activos de distintos sectores reduce
+efectivamente la multicolinealidad respecto al análisis puramente tecnológico
+de la Parte 1, donde varios activos superaban VIF de 15. El **Modelo B**
+muestra un patrón similar, con QQQ presentando VIF = 14.9 y el resto de
+activos con valores entre 1.1 y 3.0.
+
+---
+
+## Sección 2.9 — Prueba de autocorrelación (Durbin-Watson)
+
+Se aplica la prueba de Durbin-Watson a ambos modelos múltiples de la
+Parte 2 para verificar si los residuos presentan autocorrelación de primer
+orden. En datos diarios de mercado este problema es menos frecuente que en
+datos intradía, pero sigue siendo importante verificarlo para validar la
+confiabilidad de las inferencias.
+
+```{r durbin-watson-parte2}
+# Durbin-Watson para el Modelo A (TSLA como dependiente)
+cat("=== Durbin-Watson Modelo A: TSLA ===\n")
+# H0: no existe autocorrelación en los residuos
+# H1: existe autocorrelación de primer orden
+dwtest(mod_tsla_p2)
+
+# Durbin-Watson para el Modelo B (SPY como dependiente)
+cat("\n=== Durbin-Watson Modelo B: SPY ===\n")
+dwtest(mod_spy_p2)
+```
+
+**Interpretación Durbin-Watson (Parte 2):**
+
+Los resultados contrastan favorablemente con los obtenidos en la Parte 1 y
+confirman que el cambio a datos diarios resuelve el problema de autocorrelación.
+
+El **Modelo A** (TSLA) arroja DW = 2.028 con p-value = 0.653 — **no se
+rechaza** la hipótesis nula. El estadístico es prácticamente igual a 2,
+el valor ideal, indicando residuos independientes entre sí en el tiempo.
+
+El **Modelo B** (SPY) presenta DW = 2.053 con p-value = 0.767 — mismo
+resultado: **no hay autocorrelación**. Esto valida que los errores estándar
+de ambos modelos son confiables y que las pruebas t y F pueden interpretarse
+sin las correcciones que fueron necesarias en la Parte 1. La migración de
+datos a 5 minutos a datos diarios elimina efectivamente el efecto de momentum
+de muy corto plazo que generaba la severa autocorrelación observada
+anteriormente (DW = 0.277 en Parte 1).
+
+---
+
+## Sección 2.10 — Exportación de datos para series de tiempo (Google Colab)
+
+Antes de concluir el análisis en R, se exporta la tabla de retornos diarios
+en formato Excel para ser utilizada como input en el modelo ARIMA de series
+de tiempo que se correrá en Google Colab. El archivo exportado contiene
+una columna de fecha y una columna de retornos por cada uno de los 15 activos.
+
+```{r exportar-colab}
+# Se exporta la tabla de retornos diarios para Google Colab
+write_xlsx(retornos, "retornos_para_arima.xlsx")
+
+cat("Archivo exportado correctamente: retornos_para_arima.xlsx\n")
+cat(paste("Observaciones:", nrow(retornos), "\n"))
+cat(paste("Activos:", ncol(retornos) - 1, "\n"))
+```
+
+**Nota sobre la exportación:**
+
+Se exportaron exitosamente 751 observaciones de retornos diarios para los
+15 activos en el archivo `retornos_para_arima.xlsx`. Este archivo será
+utilizado como input directo en el script de Python en Google Colab, donde
+se ajustará un modelo ARIMA para cada activo con el objetivo de generar
+pronósticos de retorno esperado para los próximos 7 días. Los resultados
+de dichos pronósticos se integrarán en la Sección 2.11 para determinar
+los pesos finales del portafolio reestructurado.
+
+---
+
+## Sección 2.11 — Conclusión Parte 2: reestructuración del portafolio
+
+### Resultados del modelo ARIMA + GARCH (Google Colab)
+
+Los modelos de series de tiempo ARIMA + GARCH se corrieron para los 7 activos
+más prometedores del portafolio en Google Colab, utilizando datos diarios
+del período enero 2022 – marzo 2026 (1,056 observaciones por activo).
+`auto_arima` seleccionó automáticamente el orden óptimo de cada modelo
+minimizando el criterio de información AIC. Los pronósticos corresponden
+a los próximos **7 días hábiles** (20–28 de marzo de 2026):
+
+| Activo | Precio Actual | Forecast Promedio | Retorno Esperado | Orden ARIMA | Decisión |
+|--------|-------------|-----------------|-----------------|-------------|----------|
+| NVDA | $178.56 | $179.79 | +0.69% | (3,1,1) | **COMPRAR** |
+| META | $606.70 | $607.18 | +0.08% | (1,1,0) | **COMPRAR** |
+| TSLA | $380.30 | $380.30 | +0.00% | (0,1,0) | **COMPRAR** |
+| AMZN | $208.76 | $208.76 | +0.00% | (0,1,0) | **COMPRAR** |
+| MSFT | $389.02 | $389.02 | +0.00% | (0,1,0) | **COMPRAR** |
+| AAPL | $248.96 | $248.90 | −0.02% | (1,1,0) | SHORT |
+| QQQ | $593.02 | $593.02 | −0.00% | (0,1,0) | SHORT |
+
+**Interpretación de los resultados ARIMA:**
+
+NVDA fue el único activo que produjo un modelo ARIMA no trivial — orden
+(3,1,1) — con un potencial de alza real de $1.95 sobre el precio actual,
+lo que le otorga la señal de compra con mayor convicción del grupo. El resto
+de los activos con decisión COMPRAR (TSLA, AMZN, MSFT) convergieron al modelo
+de caminata aleatoria (0,1,0), lo que significa que el mejor pronóstico
+estadístico disponible es que el precio se mantendrá en su nivel actual.
+Esto no es una señal negativa sino una característica bien documentada de
+los precios de activos eficientes: en ausencia de patrones predecibles,
+el precio de hoy es el mejor estimador del precio de mañana.
+
+AAPL y QQQ reciben señal SHORT, pero por márgenes prácticamente nulos
+(−$0.06 y −$0.00 respectivamente), lo cual no constituye una señal operativa
+sólida. Dado que ambos activos presentaron betas significativos en el análisis
+de regresión de R y VIF saludables, se opta por mantenerlos en el portafolio
+con pesos reducidos en lugar de venderlos en corto.
+
+### Resultados del modelo de Panel Data con efectos fijos
+
+El modelo PanelOLS con efectos fijos por entidad analizó la relación entre
+variables fundamentales trimestrales y el Net Income de las 7 empresas del
+portafolio (TSLA, NVDA, AMZN, MSFT, META, AAPL, QCOM) durante los últimos
+5 trimestres disponibles (35 observaciones totales).
+
+Los resultados del modelo son los siguientes:
+
+- **R² within = 0.598** — el modelo explica el 59.8% de la variación en el
+  ingreso neto dentro de cada empresa a lo largo del tiempo, controlando por
+  sus características fijas. El F-statistic = 12.40 con p-value = 0.000
+  confirma que el modelo es globalmente significativo.
+- **Revenue** (coef = 0.2024, p < 0.01): por cada millón de dólares adicional
+  en ingresos, el ingreso neto aumenta en promedio $202,400 USD, manteniendo
+  constantes el margen operativo y el nivel de endeudamiento. Este coeficiente
+  es positivo y altamente significativo, confirmando que el crecimiento de
+  ingresos es un driver fundamental de rentabilidad en este grupo de empresas.
+- **OperatingMargin** (coef = 939.23, p < 0.01): un incremento de 1 punto
+  porcentual en el margen operativo se asocia con un aumento de $939 millones
+  en el ingreso neto, lo que refleja el enorme apalancamiento operativo de
+  estas empresas tecnológicas.
+- **DebtToEquity** (coef = −5,498, p = 0.605): no es estadísticamente
+  significativo, lo que indica que el nivel de apalancamiento no diferencia
+  el desempeño en utilidades dentro de este grupo de empresas, posiblemente
+  porque todas mantienen niveles de deuda manejables y acceso a capital similar.
+
+La prueba de poolabilidad (F = 6.71, p = 0.0003) rechaza la hipótesis de
+que los efectos fijos son conjuntamente cero, validando la necesidad del
+modelo con efectos fijos frente a una regresión pooled estándar.
+
+---
+
+### Portafolio final reestructurado
+
+Integrando los resultados del análisis econométrico completo — betas vs SPY
+de las regresiones simples, significancia en los modelos múltiples, VIF,
+ausencia de autocorrelación (Durbin-Watson), pronósticos ARIMA y solidez
+de fundamentales del Panel Data — se determina la siguiente asignación
+final de capital para los **$100,000,000 USD**:
+
+| Activo | Empresa | Sector | Rol | Peso | Monto (USD) | Justificación |
+|--------|---------|--------|-----|------|-------------|---------------|
+| **NVDA** | NVIDIA | Tech/Semiconductores | Ofensivo | 25% | $25,000,000 | Mayor potencial ARIMA (+$1.95), beta alto, significativo en reg. múltiple, VIF sano |
+| **TSLA** | Tesla | Tech/EV | Ofensivo | 20% | $20,000,000 | Mayor componente idiosincrático, ARIMA COMPRAR, presente en portafolio inicial |
+| **META** | Meta Platforms | Tech/Digital | Ofensivo | 15% | $15,000,000 | ARIMA COMPRAR con tendencia positiva (1,1,0), beta significativo vs SPY |
+| **MSFT** | Microsoft | Tech/Cloud | Ofensivo | 15% | $15,000,000 | ARIMA COMPRAR, VIF moderado, fundamentales sólidos (OperatingMargin alto) |
+| **AMZN** | Amazon | Tech/Cloud | Ofensivo | 10% | $10,000,000 | ARIMA COMPRAR, R² = 0.452 vs SPY, Revenue creciente en Panel Data |
+| **GLD** | Gold ETF | Metales preciosos | Defensivo | 8% | $8,000,000 | Correlación negativa con tech, cobertura ante caídas del mercado |
+| **WMT** | Walmart | Consumo básico | Defensivo | 4% | $4,000,000 | Beta bajo (R² = 0.098 vs SPY), estabilizador del portafolio |
+| **XOM** | ExxonMobil | Energía | Defensivo | 3% | $3,000,000 | Descorrelacionado del sector tech, cobertura ante shocks energéticos |
+| **AAPL** | Apple | Tech | Mixto | 0% | $0 | ARIMA señal SHORT (−$0.06), se excluye temporalmente |
+| **QQQ** | Nasdaq ETF | ETF índice | Referencia | 0% | $0 | Alta colinealidad con SPY (VIF=32), señal ARIMA neutral, excluido |
+| **Total** | | | | **100%** | **$100,000,000** | |
+
+**Justificación de la reestructuración:**
+
+La comparación entre el portafolio inicial (Parte 1, 6 acciones puramente
+tecnológicas) y el portafolio final refleja una evolución metodológica
+significativa. El análisis inicial, realizado con datos intradía de 5 minutos,
+identificó las acciones con mayor co-movilidad sectorial pero sin considerar
+diversificación ni riesgo de autocorrelación. El análisis de la Parte 2,
+con datos diarios y un conjunto más amplio de herramientas, evidenció que:
+
+Primero, la incorporación de activos defensivos (GLD, WMT, XOM) reduce
+la correlación media del portafolio y proporciona cobertura ante caídas
+del sector tecnológico, sin sacrificar el potencial de rendimiento dado
+que su peso combinado es del 15%.
+
+Segundo, NVDA se mantiene como el activo con mayor peso ofensivo, respaldado
+simultáneamente por su rol dominante en el modelo de regresión múltiple,
+su beta elevado vs SPY, su VIF saludable en el portafolio diversificado y
+el único pronóstico ARIMA con tendencia positiva clara (orden 3,1,1 vs
+caminata aleatoria del resto).
+
+Tercero, AAPL y QQQ se excluyen del portafolio final: AAPL por la señal
+SHORT del ARIMA (aunque marginal) y QQQ por su multicolinealidad estructural
+con SPY (VIF = 32.4) que no agrega información diferenciada al portafolio.
+
+Cuarto, el Panel Data confirma que Revenue y OperatingMargin son los
+drivers fundamentales del Net Income en este grupo de empresas. NVDA, META
+y MSFT destacan por sus márgenes operativos más altos del grupo, lo que
+respalda su mayor ponderación en el portafolio final.
